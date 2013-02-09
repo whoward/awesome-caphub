@@ -7,33 +7,52 @@
 # Configuration example for layout like:
 # config/deploy/{NAMESPACE}/.../#{PROJECT_NAME}/{STAGE_NAME}.rb
 
+set :application, "awesome"
+set :user, "deployer"
+set :group, "deployer"
+set :use_sudo, false
+set :keep_releases, 4
+
+# Forward the user's SSH Agent (so we don't need deployer keys)
+ssh_options[:forward_agent] = true
+ssh_options[:keys] = [File.join(ENV['HOME'], ".ssh", "#{user}")]
+
+# Don't touch the asset files under public/
+set :normalize_asset_timestamps, false
+
+# Git Repository
 set :scm, :git
+set :repository, "git://github.com/whoward/awesome.git"
+set :branch, :master unless exists?(:branch)
 
-set :git_shallow_clone, 1
+set :deploy_via, :remote_cache
 
-set :deploy_via, :export
+set :rails_env, :production
 
-set :branch, lambda { Capistrano::CLI.ui.ask "SCM branch: " }
+set(:deploy_to) { "/home/deployer/apps/#{application}" }
 
-set(:application) { config_name.split(':').reverse[1] }
+server "rackspace", :app, :web, :db, :primary => true
 
-set(:stage) { config_name.split(':').last }
+# Bundler integration
+require 'bundler/capistrano'
 
-set(:rails_env) { stage }
+# RVM integration
+require "rvm/capistrano"
+set :rvm_path, "/usr/local/rvm"
+set :rvm_bin_path, "/usr/local/rvm/bin"
+set :rvm_ruby_string, "ruby-1.9.3"
 
-set(:rake) { use_bundle ? "bundle exec rake" : "rake" }
+after "deploy:update_code", "deploy:configs"
+after "deploy:update_code", "deploy:game"
 
-set(:repository) { "git://scm.mycompany.com/#{application}.git" }
+namespace :deploy do
+   desc "Symlink configuration files"
+   task :configs do
+      run "ln -sf #{shared_path}/mongoid.yml #{release_path}/config/mongoid.yml"
+   end
 
-set(:deploy_to) { "/var/www/#{application}" }
-
-set :calendar_username, 'vasya.pupkin@gmail.com'
-
-set :calendar_password, 'qwery123456'
-
-set(:calendar_name) { "mycompany-#{stage}" }
-
-after 'deploy' do
-  set :calendar_event_title, "[DEPLOYED] #{application} #{branch}: #{real_revision}"
-  top.calendar.create_event
+   desc "Installs the game data files"
+   task :game do
+      run "ln -sf #{shared_path}/game.json #{release_path}/game.json"
+   end
 end
